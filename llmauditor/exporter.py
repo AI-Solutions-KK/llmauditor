@@ -6,13 +6,13 @@ Two export paths:
   2. export_certification()  — full evaluation certification (MD / HTML / PDF)
 
 Certification report sections:
-  1. Application Identity    6. Stability Analysis
-  2. Evaluation Summary      7. Scoring Breakdown
-  3. Metrics & Distributions 8. Certification Verdict
-  4. Hallucination Analysis  9. Improvement Recommendations
-  5. Governance Compliance  10. Integrity Hash
-                            11. Report Summary (Plain Language)
-  + Certification Stamp (top)  + Digital Signature (bottom)
+  1. Application Identity    7. Scoring Breakdown
+  2. Evaluation Summary      8. Certification Verdict
+  3. Metrics & Distributions 9. Improvement Recommendations
+  4. Hallucination Analysis 10. Integrity Hash
+  5. Governance Compliance  11. Understanding the Numbers
+  6. Stability Analysis     12. Report Summary (Plain Language)
+  + Certification Stamp (top-right)  + Digital Signature (bottom)
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from llmauditor.evaluation import EvaluationReport
 
-_VERSION = "LLMAuditor v1.0.0"
+_VERSION = "LLMAuditor v1.1.0"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -42,6 +42,19 @@ def export_execution(
     output_dir: str = ".",
 ) -> str:
     """Export a single execution audit report."""
+    try:
+        return _export_execution_impl(data, quality, fmt, output_dir)
+    except Exception as exc:
+        return f"Export failed: {exc}"
+
+
+def _export_execution_impl(
+    data: dict[str, Any],
+    quality: dict[str, Any],
+    fmt: str,
+    output_dir: str = ".",
+) -> str:
+    """Internal export logic (separated for error isolation)."""
     fmt = fmt.lower().strip()
     if fmt not in ("md", "html", "pdf"):
         raise ValueError(f"Unsupported format: '{fmt}'")
@@ -237,6 +250,14 @@ def _generate_cert_number(ihash: str) -> str:
 
 def export_certification(report: "EvaluationReport", fmt: str, output_dir: str = ".") -> str:
     """Export a full evaluation certification report."""
+    try:
+        return _export_certification_impl(report, fmt, output_dir)
+    except Exception as exc:
+        return f"Export failed: {exc}"
+
+
+def _export_certification_impl(report: "EvaluationReport", fmt: str, output_dir: str = ".") -> str:
+    """Internal certification export logic (separated for error isolation)."""
     fmt = fmt.lower().strip()
     if fmt not in ("md", "html", "pdf"):
         raise ValueError(f"Unsupported format: '{fmt}'")
@@ -260,6 +281,49 @@ def export_certification(report: "EvaluationReport", fmt: str, output_dir: str =
         _cert_pdf(report, ihash, cert_number, path)
 
     return os.path.abspath(path)
+
+
+def export_certification_all(report: "EvaluationReport", output_dir: str = ".") -> dict[str, str]:
+    """
+    Export the certification report in all three formats (MD, HTML, PDF).
+
+    Returns a dict mapping format name to absolute file path:
+        {"md": "/path/to.md", "html": "/path/to.html", "pdf": "/path/to.pdf"}
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    ihash = _hash(report.to_dict())
+    cert_number = _generate_cert_number(ihash)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base = f"certification_{report.session.app_name.replace(' ', '_')}_{ts}"
+    results: dict[str, str] = {}
+
+    # Markdown
+    try:
+        md_content = _cert_md(report, ihash, cert_number)
+        md_path = os.path.join(output_dir, f"{base}.md")
+        _write(md_path, md_content)
+        results["md"] = os.path.abspath(md_path)
+    except Exception as exc:
+        results["md"] = f"ERROR: {exc}"
+
+    # HTML
+    try:
+        html_content = _cert_html(report, ihash, cert_number)
+        html_path = os.path.join(output_dir, f"{base}.html")
+        _write(html_path, html_content)
+        results["html"] = os.path.abspath(html_path)
+    except Exception as exc:
+        results["html"] = f"ERROR: {exc}"
+
+    # PDF
+    try:
+        pdf_path = os.path.join(output_dir, f"{base}.pdf")
+        _cert_pdf(report, ihash, cert_number, pdf_path)
+        results["pdf"] = os.path.abspath(pdf_path)
+    except Exception as exc:
+        results["pdf"] = f"ERROR: {exc}"
+
+    return results
 
 
 # ── Certification: Markdown ───────────────────────────────────────────────── #
@@ -383,8 +447,25 @@ def _cert_md(r: "EvaluationReport", ihash: str, cert_number: str) -> str:
         f"`{ihash}`", "",
         "", "---", "",
 
-        # Section 11 — Plain Language Summary
-        "## 11. Report Summary", "",
+        # Section 11 — Understanding the Numbers
+        "## 11. Understanding the Numbers", "",
+        "> **What do the statistics above mean?** Here is a detailed "
+        "explanation for non-technical readers.", "",
+    ]
+
+    for item in _build_detailed_explanation(r):
+        lines.append(f"### {item['term']}")
+        lines.append(f"")
+        lines.append(f"**Value:** {item['value']}")
+        lines.append(f"")
+        lines.append(f"{item['explanation']}")
+        lines.append(f"")
+
+    lines += [
+        "---", "",
+
+        # Section 12 — Plain Language Summary
+        "## 12. Report Summary", "",
         "> **What does this report mean?** Here is a simple summary "
         "anyone can understand.", "",
     ]
@@ -460,7 +541,7 @@ def _cert_html(r: "EvaluationReport", ihash: str, cert_number: str) -> str:
 
     # ── SVG Certification Stamp ───────────────────────────────────────── #
     stamp_svg = f"""
-    <div style="text-align:center;padding:32px 0 8px;">
+    <div style="position:absolute;top:10px;right:20px;z-index:10;">
         <svg width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
             <circle cx="80" cy="80" r="72" fill="none" stroke="#0d5e2e" stroke-width="3"/>
             <circle cx="80" cy="80" r="58" fill="none" stroke="#0d5e2e" stroke-width="1.5"/>
@@ -551,8 +632,22 @@ def _cert_html(r: "EvaluationReport", ihash: str, cert_number: str) -> str:
     <div class="section"><h2>9. Improvement Recommendations</h2>
         <ul class="notes-list">{suggestions_html}</ul></div>
 
+    <div class="section"><h2>10. Integrity Hash</h2>
+        <p><code style="font-size:11px;word-break:break-all;">{ihash}</code></p></div>
+
+    <div class="section" style="background:#f9f9ff;border-left:4px solid #2c3e50;">
+        <h2 style="color:#2c3e50;">11. Understanding the Numbers</h2>
+        <p style="font-size:13px;color:#555;margin-bottom:18px;">What do the statistics above mean? Here is a detailed explanation for non-technical readers.</p>
+        {''.join(f'''
+        <div style="margin-bottom:18px;padding:14px 18px;background:#fff;border-radius:6px;border:1px solid #eaecf0;">
+            <div style="font-weight:700;font-size:14px;color:#2c3e50;margin-bottom:4px;">{item["term"]}</div>
+            <div style="font-size:12px;color:#7f8c8d;margin-bottom:6px;font-family:monospace;">{item["value"]}</div>
+            <div style="font-size:13px;color:#444;line-height:1.7;">{item["explanation"]}</div>
+        </div>''' for item in _build_detailed_explanation(r))}
+    </div>
+
     <div class="section" style="background:#f8fdf8;">
-        <h2 style="color:#0d5e2e;">11. Report Summary — What Does This Mean?</h2>
+        <h2 style="color:#0d5e2e;">12. Report Summary — What Does This Mean?</h2>
         <p style="font-size:13px;color:#555;margin-bottom:18px;">Here is a simple summary anyone can understand.</p>
         {''.join(f'''
         <div style="display:flex;align-items:flex-start;margin-bottom:14px;">
@@ -686,8 +781,54 @@ def _cert_pdf(r: "EvaluationReport", ihash: str, cert_number: str, path: str) ->
         styles["body"]))
     story.append(rl["Spacer"](1, 6 * rl["mm"]))
 
-    # 11. Plain Language Summary
-    story += _pdf_section("11. Report Summary", styles)
+    # 11. Understanding the Numbers
+    story += _pdf_section("11. Understanding the Numbers", styles)
+    story.append(rl["Paragraph"](
+        "<font size='8' color='#555555'><i>"
+        "What do the statistics above mean? Here is a detailed explanation "
+        "for non-technical readers."
+        "</i></font>",
+        styles["body"]))
+    story.append(rl["Spacer"](1, 3 * rl["mm"]))
+
+    detail_term_style = rl["ParagraphStyle"](
+        "detail_term",
+        fontName="Helvetica-Bold",
+        fontSize=10,
+        textColor=rl["colors"].HexColor("#2c3e50"),
+        leading=14,
+        spaceBefore=8,
+        spaceAfter=2,
+        leftIndent=4,
+    )
+    detail_value_style = rl["ParagraphStyle"](
+        "detail_value",
+        fontName="Courier",
+        fontSize=7.5,
+        textColor=cm["MID_GREY"],
+        leading=11,
+        spaceAfter=2,
+        leftIndent=24,
+    )
+    detail_explain_style = rl["ParagraphStyle"](
+        "detail_explain",
+        fontName="Helvetica",
+        fontSize=9,
+        textColor=cm["BLACK"],
+        leading=15,
+        spaceAfter=10,
+        leftIndent=24,
+    )
+
+    for item in _build_detailed_explanation(r):
+        story.append(rl["Paragraph"](item["term"], detail_term_style))
+        story.append(rl["Paragraph"](item["value"], detail_value_style))
+        story.append(rl["Paragraph"](item["explanation"], detail_explain_style))
+
+    story.append(rl["Spacer"](1, 4 * rl["mm"]))
+
+    # 12. Plain Language Summary
+    story += _pdf_section("12. Report Summary", styles)
     story.append(rl["Paragraph"](
         "<font size='8' color='#555555'><i>"
         "What does this report mean? Here is a simple summary anyone can understand."
@@ -890,6 +1031,162 @@ def _build_plain_summary(r: "EvaluationReport") -> list[dict]:
     return items
 
 
+def _build_detailed_explanation(r: "EvaluationReport") -> list[dict]:
+    """
+    Generate plain-language explanations of every statistical metric used
+    in this report.  Each item: {"term", "value", "explanation"}.
+    Written for non-technical stakeholders.
+    """
+    m = r.metrics
+    s = r.score
+    items: list[dict] = []
+
+    # Mean
+    items.append({
+        "term": "Mean (Average)",
+        "value": (
+            f"Token Mean: {m.token_stats.mean:.0f}  |  "
+            f"Cost Mean: ${m.cost_stats.mean:.6f}  |  "
+            f"Latency Mean: {m.latency_stats.mean:.3f}s"
+        ),
+        "explanation": (
+            "The mean is the simple average across all test runs. "
+            "For example, if the AI was called 3 times and used 100, 200 "
+            "and 300 tokens, the mean would be 200. A stable mean "
+            "indicates the AI behaves consistently between calls."
+        ),
+    })
+
+    # Standard Deviation
+    items.append({
+        "term": "Standard Deviation (StdDev)",
+        "value": (
+            f"Token StdDev: {m.token_stats.stddev:.0f}  |  "
+            f"Cost StdDev: ${m.cost_stats.stddev:.6f}  |  "
+            f"Latency StdDev: {m.latency_stats.stddev:.3f}s"
+        ),
+        "explanation": (
+            "Standard deviation measures how much individual results "
+            "spread out from the average. A low number means the AI "
+            "behaves consistently every time. A high number means results "
+            "fluctuate widely — which can make the application "
+            "unpredictable for end users."
+        ),
+    })
+
+    # CV
+    lat_cv = m.latency_stats.stddev / max(m.latency_stats.mean, 0.001)
+    tok_cv = m.token_stats.stddev / max(m.token_stats.mean, 1)
+    items.append({
+        "term": "Coefficient of Variation (CV)",
+        "value": f"Latency CV: {lat_cv:.3f}  |  Token CV: {tok_cv:.3f}",
+        "explanation": (
+            "CV is the ratio of standard deviation to the mean. It "
+            "tells you how variable results are relative to their average. "
+            "A CV below 0.3 means stable, predictable performance. "
+            "Above 0.5 indicates high variability that may need attention. "
+            "Above 1.0 is a red flag — the AI is very inconsistent."
+        ),
+    })
+
+    # Min / Max
+    items.append({
+        "term": "Min / Max Range",
+        "value": (
+            f"Tokens: {m.token_stats.min_val:.0f}–{m.token_stats.max_val:.0f}  |  "
+            f"Latency: {m.latency_stats.min_val:.3f}s–{m.latency_stats.max_val:.3f}s  |  "
+            f"Cost: ${m.cost_stats.min_val:.6f}–${m.cost_stats.max_val:.6f}"
+        ),
+        "explanation": (
+            "Min and Max show the smallest and largest values observed "
+            "during testing. A narrow gap (min close to max) means "
+            "predictable performance. A wide gap may indicate the AI "
+            "responds very differently depending on the input."
+        ),
+    })
+
+    # Hallucination Risk
+    if m.hallucination_stats.count > 0:
+        items.append({
+            "term": "Hallucination Risk Score",
+            "value": (
+                f"Mean Risk: {m.hallucination_stats.mean:.1%}  |  "
+                f"Max Risk: {m.hallucination_stats.max_val:.1%}"
+            ),
+            "explanation": (
+                "Hallucination risk measures the likelihood that the AI "
+                "invented facts or produced inaccurate information. "
+                "0% = no detected risk, 100% = extremely high risk. "
+                "Below 15% is considered LOW risk. The system analyses "
+                "factual claim density, hedging language, absolute "
+                "statements and self-contradictions to compute this."
+            ),
+        })
+
+    # Confidence
+    items.append({
+        "term": "Confidence Score",
+        "value": f"Mean Confidence: {m.confidence_stats.mean:.0f}%",
+        "explanation": (
+            "Confidence estimates how trustworthy each AI response is, "
+            "based on response length, cost and execution time. "
+            "85%+ = healthy and complete. "
+            "70–84% = minor anomalies, review advised. "
+            "Below 70% = the response may be too short, too costly or "
+            "took an unusually long time."
+        ),
+    })
+
+    # Failure Rate
+    items.append({
+        "term": "Failure Rate",
+        "value": f"{m.failure_rate:.1%}",
+        "explanation": (
+            "The percentage of AI calls that failed or produced errors. "
+            "0% means every call succeeded. Even a small failure rate "
+            "(above 2%) should be investigated — it may indicate "
+            "unreliable API connections, invalid inputs or model "
+            "limitations."
+        ),
+    })
+
+    # Risk Distribution
+    rd = m.risk_distribution
+    total = max(sum(rd.values()), 1)
+    items.append({
+        "term": "Risk Distribution",
+        "value": (
+            f"LOW: {rd.get('LOW', 0)} ({rd.get('LOW', 0)/total:.0%})  |  "
+            f"MEDIUM: {rd.get('MEDIUM', 0)} ({rd.get('MEDIUM', 0)/total:.0%})  |  "
+            f"HIGH: {rd.get('HIGH', 0)} ({rd.get('HIGH', 0)/total:.0%})"
+        ),
+        "explanation": (
+            "Each AI call is classified as LOW, MEDIUM or HIGH risk "
+            "based on its cost and token usage. A healthy application "
+            "should have most calls in the LOW category. MEDIUM calls "
+            "deserve monitoring. HIGH-risk calls should be investigated."
+        ),
+    })
+
+    # Overall Score
+    items.append({
+        "term": "Overall Certification Score",
+        "value": f"{s.overall:.1f}/100 — {s.level}",
+        "explanation": (
+            f"The final score is a weighted combination of five quality "
+            f"areas: Stability ({s.weights.get('stability', 0):.0%}), "
+            f"Factual Reliability ({s.weights.get('factual_reliability', 0):.0%}), "
+            f"Governance Compliance ({s.weights.get('governance_compliance', 0):.0%}), "
+            f"Cost Predictability ({s.weights.get('cost_predictability', 0):.0%}), "
+            f"and Risk Profile ({s.weights.get('risk_profile', 0):.0%}). "
+            f"Each area is scored 0–100 and combined using these weights. "
+            f"Platinum ≥ 90, Gold ≥ 80, Silver ≥ 70, Conditional Pass ≥ 60."
+        ),
+    })
+
+    return items
+
+
 def _hash(data: dict) -> str:
     payload = json.dumps(data, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
@@ -910,7 +1207,7 @@ def _html_shell(title: str, subtitle: str, body: str, footer: str = "",
     <title>{title}</title>
     <style>
     body{{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;color:#2c3e50;margin:0;padding:40px}}
-    .report{{max-width:860px;margin:0 auto;background:#fff;border-radius:8px;box-shadow:0 2px 16px rgba(0,0,0,.1);overflow:hidden}}
+    .report{{max-width:860px;margin:0 auto;background:#fff;border-radius:8px;box-shadow:0 2px 16px rgba(0,0,0,.1);overflow:hidden;position:relative}}
     .header{{background:{header_bg};color:#fff;padding:32px 40px 24px}}
     .header h1{{margin:0 0 8px;font-size:22px;letter-spacing:1px}}
     .header .subtitle{{font-size:13px;color:#a0b0c8}}

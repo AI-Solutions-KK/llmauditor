@@ -58,6 +58,16 @@ class ExecutionReport:
 
     def display(self) -> None:
         """Render a structured CLI audit panel using rich."""
+        try:
+            self._display_impl()
+        except Exception as exc:
+            try:
+                _console.print(f"[dim red]LLMAuditor display error: {exc}[/dim red]")
+            except Exception:
+                pass  # absolute last resort — never crash the host app
+
+    def _display_impl(self) -> None:
+        """Internal display logic (separated for error isolation)."""
         confidence_score, confidence_label = self._compute_confidence()
         risk_level, risk_label = self._compute_risk()
         notes = self._generate_notes()
@@ -155,53 +165,70 @@ class ExecutionReport:
 
     def export(self, fmt: str = "md", output_dir: str = ".") -> str:
         """Export this report to a file (md, html, or pdf)."""
-        from llmauditor.exporter import export_execution
+        try:
+            from llmauditor.exporter import export_execution
 
-        confidence_score, confidence_label = self._compute_confidence()
-        risk_level, _ = self._compute_risk()
-        notes = self._generate_notes()
-        summary = self._generate_summary()
+            confidence_score, confidence_label = self._compute_confidence()
+            risk_level, _ = self._compute_risk()
+            notes = self._generate_notes()
+            summary = self._generate_summary()
 
-        quality = {
-            "confidence_score": confidence_score,
-            "risk_level": risk_level,
-            "notes": notes,
-            "summary": summary,
-        }
+            quality = {
+                "confidence_score": confidence_score,
+                "risk_level": risk_level,
+                "notes": notes,
+                "summary": summary,
+            }
 
-        return export_execution(
-            data=self.to_dict(),
-            quality=quality,
-            fmt=fmt,
-            output_dir=output_dir,
-        )
+            return export_execution(
+                data=self.to_dict(),
+                quality=quality,
+                fmt=fmt,
+                output_dir=output_dir,
+            )
+        except Exception as exc:
+            return f"Export failed: {exc}"
 
     # ── Serialisation ─────────────────────────────────────────────────────── #
 
     def to_dict(self) -> dict:
         """Stable serialisation of the report."""
-        confidence_score, confidence_label = self._compute_confidence()
-        risk_level, risk_label = self._compute_risk()
+        try:
+            confidence_score, confidence_label = self._compute_confidence()
+            risk_level, risk_label = self._compute_risk()
 
-        d = {
-            "execution_id":     self.execution_id,
-            "model_name":       self.model_name,
-            "execution_time":   self.execution_time,
-            "input_tokens":     self.input_tokens,
-            "output_tokens":    self.output_tokens,
-            "total_tokens":     self.total_tokens,
-            "estimated_cost":   self.estimated_cost,
-            "confidence_score": confidence_score,
-            "confidence_label": confidence_label,
-            "risk_level":       risk_level,
-            "risk_label":       risk_label,
-            "warnings":         list(self.warnings),
-        }
+            d = {
+                "execution_id":     self.execution_id,
+                "model_name":       self.model_name,
+                "execution_time":   self.execution_time,
+                "input_tokens":     self.input_tokens,
+                "output_tokens":    self.output_tokens,
+                "total_tokens":     self.total_tokens,
+                "estimated_cost":   self.estimated_cost,
+                "confidence_score": confidence_score,
+                "confidence_label": confidence_label,
+                "risk_level":       risk_level,
+                "risk_label":       risk_label,
+                "warnings":         list(self.warnings),
+            }
 
-        if self.hallucination is not None:
-            d["hallucination"] = self.hallucination.to_dict()
+            if self.hallucination is not None:
+                try:
+                    d["hallucination"] = self.hallucination.to_dict()
+                except Exception:
+                    d["hallucination"] = {"error": "serialisation failed"}
 
-        return d
+            return d
+        except Exception:
+            # Absolute minimum — enough for downstream code to not crash
+            return {
+                "execution_id": getattr(self, "execution_id", "unknown"),
+                "model_name": getattr(self, "model_name", "unknown"),
+                "execution_time": 0, "input_tokens": 0, "output_tokens": 0,
+                "total_tokens": 0, "estimated_cost": 0,
+                "confidence_score": 0, "risk_level": "UNKNOWN",
+                "warnings": ["to_dict serialisation error"],
+            }
 
     # ── Private quality computers ──────────────────────────────────────────── #
 

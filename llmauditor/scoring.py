@@ -97,6 +97,18 @@ class ScoringEngine:
         Returns:
             CertificationScore with overall score, subscores, and level.
         """
+        try:
+            return self._compute_score(metrics)
+        except Exception:
+            # Return a safe default if scoring fails internally
+            return CertificationScore(
+                overall=0.0, level="Fail", level_emoji="\u274c",
+                subscores={k: 0.0 for k in self._weights},
+                weights=dict(self._weights), breakdown={},
+            )
+
+    def _compute_score(self, metrics: dict[str, Any]) -> CertificationScore:
+        """Internal score computation (separated for error isolation)."""
         breakdown = {}
 
         stability = self._score_stability(metrics, breakdown)

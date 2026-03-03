@@ -30,6 +30,7 @@ from llmauditor.auditor import LLMAuditor, BudgetExceededError, LowConfidenceErr
 from llmauditor.hallucination import HallucinationAnalysis
 from llmauditor.evaluation import EvaluationReport
 from llmauditor.scoring import CertificationScore
+from llmauditor.exporter import export_certification_all
 
 auditor = LLMAuditor()
 
@@ -41,6 +42,7 @@ __all__ = [
     "HallucinationAnalysis",
     "EvaluationReport",
     "CertificationScore",
+    "export_certification_all",
 ]
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

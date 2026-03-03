@@ -154,6 +154,16 @@ def aggregate_metrics(reports: list[ExecutionReport]) -> EvaluationMetrics:
     if not reports:
         return EvaluationMetrics()
 
+    try:
+        return _aggregate_metrics_impl(reports)
+    except Exception:
+        # Return minimal metrics rather than crashing
+        return EvaluationMetrics(total_runs=len(reports))
+
+
+def _aggregate_metrics_impl(reports: list[ExecutionReport]) -> EvaluationMetrics:
+    """Internal aggregation logic (separated for error isolation)."""
+
     total = len(reports)
     tokens = [r.total_tokens for r in reports]
     input_tokens = [r.input_tokens for r in reports]
@@ -244,8 +254,19 @@ class EvaluationReport:
 
     def export(self, fmt: str = "pdf", output_dir: str = ".") -> str:
         """Export the certification report (md, html, or pdf)."""
-        from llmauditor.exporter import export_certification
-        return export_certification(self, fmt, output_dir)
+        try:
+            from llmauditor.exporter import export_certification
+            return export_certification(self, fmt, output_dir)
+        except Exception as exc:
+            return f"Export failed: {exc}"
+
+    def export_all(self, output_dir: str = ".") -> dict[str, str]:
+        """Export in all three formats (md, html, pdf). Returns {fmt: path}."""
+        try:
+            from llmauditor.exporter import export_certification_all
+            return export_certification_all(self, output_dir)
+        except Exception as exc:
+            return {"md": f"ERROR: {exc}", "html": f"ERROR: {exc}", "pdf": f"ERROR: {exc}"}
 
     def to_dict(self) -> dict:
         return {
@@ -258,6 +279,17 @@ class EvaluationReport:
 
     def display(self) -> None:
         """Render a rich CLI certification summary."""
+        try:
+            self._display_impl()
+        except Exception as exc:
+            try:
+                from rich.console import Console
+                Console().print(f"[dim red]LLMAuditor display error: {exc}[/dim red]")
+            except Exception:
+                pass  # never crash the host app
+
+    def _display_impl(self) -> None:
+        """Internal display logic (separated for error isolation)."""
         from rich.console import Console
         from rich.panel import Panel
         from rich.table import Table

@@ -160,7 +160,32 @@ class HallucinationDetector:
             2. Ground truth comparison (if reference provided)
             3. AI judge evaluation (if judge model is configured)
             4. Composite scoring from all available signals
+
+        Never raises — returns a safe default on any internal error.
         """
+        try:
+            return self._analyze_impl(
+                str(input_text or ""),
+                str(output_text or ""),
+                ground_truth,
+            )
+        except Exception:
+            # Return a safe zero-risk result rather than crashing
+            return HallucinationAnalysis(
+                risk_score=0.0, risk_level="LOW",
+                factual_claims_count=0, specific_numbers_count=0,
+                date_references_count=0, currency_references_count=0,
+                hedging_ratio=0.0, absolute_claims_count=0,
+                method="fallback",
+            )
+
+    def _analyze_impl(
+        self,
+        input_text: str,
+        output_text: str,
+        ground_truth: Optional[str],
+    ) -> HallucinationAnalysis:
+        """Internal analysis logic (separated for error isolation)."""
         # 1. Rule-based analysis
         rule = self._rule_based_analysis(output_text)
 

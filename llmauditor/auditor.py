@@ -192,14 +192,20 @@ class LLMAuditor:
             BudgetExceededError: If cumulative cost exceeds budget (normal mode).
             LowConfidenceError:  If confidence below guard threshold (normal mode).
         """
-        return self._build_report(
-            model=model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            raw_response=raw_response,
-            execution_time=execution_time or 0.0,
-            input_text=input_text,
-        )
+        try:
+            return self._build_report(
+                model=model,
+                input_tokens=int(input_tokens or 0),
+                output_tokens=int(output_tokens or 0),
+                raw_response=str(raw_response or ""),
+                execution_time=float(execution_time or 0.0),
+                input_text=str(input_text or ""),
+            )
+        except (BudgetExceededError, LowConfidenceError):
+            raise  # governance exceptions propagate
+        except Exception as exc:
+            # Fallback: return a minimal report so the host app never crashes
+            return self._fallback_report(model, raw_response, exc)
 
     def observe(
         self,
@@ -219,16 +225,21 @@ class LLMAuditor:
         Returns:
             ExecutionReport with hallucination analysis attached.
         """
-        report = self._build_report(
-            model=model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            raw_response=output_text,
-            execution_time=execution_time,
-            input_text=input_text,
-        )
-        report.display()
-        return report
+        try:
+            report = self._build_report(
+                model=model,
+                input_tokens=int(input_tokens or 0),
+                output_tokens=int(output_tokens or 0),
+                raw_response=str(output_text or ""),
+                execution_time=float(execution_time or 0.0),
+                input_text=str(input_text or ""),
+            )
+            report.display()
+            return report
+        except (BudgetExceededError, LowConfidenceError):
+            raise
+        except Exception as exc:
+            return self._fallback_report(model, output_text, exc)
 
     def monitor(self, model: str, **monitor_kwargs: Any) -> Callable:
         """
@@ -254,39 +265,46 @@ class LLMAuditor:
         def decorator(func: Callable) -> Callable:
             @functools.wraps(func)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
-                tracker = ExecutionTracker()
-                tracker.start()
-                result = func(*args, **kwargs)
-                tracker.stop()
+                try:
+                    tracker = ExecutionTracker()
+                    tracker.start()
+                    result = func(*args, **kwargs)
+                    tracker.stop()
 
-                # ── Parse result ──────────────────────────────────────────── #
-                if isinstance(result, dict):
-                    response = str(result.get("response", ""))
-                    in_tok = int(result.get("input_tokens", 0))
-                    out_tok = int(result.get("output_tokens", 0))
-                else:
-                    response = str(result) if result is not None else ""
-                    in_tok = 0
-                    out_tok = 0
+                    # ── Parse result ──────────────────────────────────────── #
+                    if isinstance(result, dict):
+                        response = str(result.get("response", ""))
+                        in_tok = int(result.get("input_tokens", 0))
+                        out_tok = int(result.get("output_tokens", 0))
+                    else:
+                        response = str(result) if result is not None else ""
+                        in_tok = 0
+                        out_tok = 0
 
-                # ── Derive input text from first positional arg ───────────── #
-                input_text = ""
-                if args:
-                    input_text = str(args[0])
-                elif "prompt" in kwargs:
-                    input_text = str(kwargs["prompt"])
+                    # ── Derive input text from first positional arg ───────── #
+                    input_text = ""
+                    if args:
+                        input_text = str(args[0])
+                    elif "prompt" in kwargs:
+                        input_text = str(kwargs["prompt"])
 
-                # ── Build, display, return ────────────────────────────────── #
-                report = self._build_report(
-                    model=model,
-                    input_tokens=in_tok,
-                    output_tokens=out_tok,
-                    raw_response=response,
-                    execution_time=tracker.execution_time,
-                    input_text=input_text,
-                )
-                report.display()
-                return result
+                    # ── Build, display, return ────────────────────────────── #
+                    report = self._build_report(
+                        model=model,
+                        input_tokens=in_tok,
+                        output_tokens=out_tok,
+                        raw_response=response,
+                        execution_time=tracker.execution_time,
+                        input_text=input_text,
+                    )
+                    report.display()
+                    return result
+                except (BudgetExceededError, LowConfidenceError):
+                    raise  # governance exceptions propagate
+                except Exception:
+                    # Auditor error must never break the decorated function
+                    # Re-call the original function without auditing
+                    return func(*args, **kwargs)
 
             return wrapper
         return decorator
@@ -319,11 +337,17 @@ class LLMAuditor:
             app_name: Name of the application under evaluation.
             version:  Application version string.
         """
-        self._eval_session = EvaluationSession(
-            app_name=app_name,
-            version=version,
-            start_index=len(self._history),
-        )
+        try:
+            self._eval_session = EvaluationSession(
+                app_name=str(app_name or "Unknown"),
+                version=str(version or "1.0.0"),
+                start_index=len(self._history),
+            )
+        except Exception:
+            self._eval_session = EvaluationSession(
+                app_name="Unknown", version="1.0.0",
+                start_index=len(self._history),
+            )
 
     def end_evaluation(self) -> None:
         """
@@ -334,7 +358,11 @@ class LLMAuditor:
         """
         if self._eval_session is None:
             raise RuntimeError("No active evaluation session to end.")
-        self._eval_session.end(end_index=len(self._history))
+        try:
+            self._eval_session.end(end_index=len(self._history))
+        except Exception:
+            self._eval_session.end_time = __import__("datetime").datetime.now()
+            self._eval_session.end_index = len(self._history)
 
     def generate_evaluation_report(self) -> EvaluationReport:
         """
@@ -353,32 +381,53 @@ class LLMAuditor:
         if self._eval_session is None:
             raise RuntimeError("No evaluation session. Call start_evaluation() first.")
 
-        start = self._eval_session.start_index
-        end = self._eval_session.end_index
-        if end is None:
-            end = len(self._history)
+        try:
+            start = self._eval_session.start_index
+            end = self._eval_session.end_index
+            if end is None:
+                end = len(self._history)
 
-        reports = self._history[start:end]
+            reports = self._history[start:end]
 
-        # Aggregate metrics
-        metrics = aggregate_metrics(reports)
+            # Aggregate metrics
+            metrics = aggregate_metrics(reports)
 
-        # Score
-        score = self._scoring_engine.score(metrics.to_dict())
+            # Score
+            score = self._scoring_engine.score(metrics.to_dict())
 
-        # Suggestions
-        suggestions = self._suggestion_engine.generate(
-            metrics=metrics.to_dict(),
-            subscores=score.subscores,
-        )
+            # Suggestions
+            suggestions = self._suggestion_engine.generate(
+                metrics=metrics.to_dict(),
+                subscores=score.subscores,
+            )
 
-        return EvaluationReport(
-            session=self._eval_session,
-            metrics=metrics,
-            score=score,
-            suggestions=suggestions,
-            execution_reports=reports,
-        )
+            return EvaluationReport(
+                session=self._eval_session,
+                metrics=metrics,
+                score=score,
+                suggestions=suggestions,
+                execution_reports=reports,
+            )
+        except Exception as exc:
+            # Provide a minimal report on internal error so host app never crashes
+            from llmauditor.evaluation import EvaluationMetrics
+            from llmauditor.scoring import CertificationScore
+
+            start = self._eval_session.start_index
+            end = self._eval_session.end_index or len(self._history)
+            reports = self._history[start:end]
+            metrics = EvaluationMetrics(total_runs=len(reports))
+            score = CertificationScore(
+                overall=0.0, level="Fail", level_emoji="\u274c",
+                subscores={}, weights={}, breakdown={},
+            )
+            return EvaluationReport(
+                session=self._eval_session,
+                metrics=metrics,
+                score=score,
+                suggestions=[],
+                execution_reports=reports,
+            )
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  ENTERPRISE CONFIGURATION (NEW)
@@ -532,4 +581,24 @@ class LLMAuditor:
                         f"{self._guard_threshold}%"
                     )
 
+        return report
+
+    # ── Fallback report (error safety) ─────────────────────────────────────── #
+
+    def _fallback_report(
+        self, model: Any, raw_response: Any, exc: Exception,
+    ) -> ExecutionReport:
+        """Create a minimal valid report when an internal error occurs."""
+        report = ExecutionReport(
+            execution_id=str(uuid.uuid4()),
+            model_name=str(model or "unknown"),
+            execution_time=0.0,
+            input_tokens=0,
+            output_tokens=0,
+            total_tokens=0,
+            estimated_cost=0.0,
+            raw_response=str(raw_response or "")[:500],
+        )
+        report.warnings.append(f"[AUDITOR ERROR] {type(exc).__name__}: {exc}")
+        self._history.append(report)
         return report
