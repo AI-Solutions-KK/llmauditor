@@ -1,0 +1,10 @@
+# LLMControlEngine — Dependencies
+#
+# Phase 2: rich added for professional CLI reporting.
+# Phase 3 will add: markdown>=3.5.0, weasyprint>=60.0 (or reportlab>=4.0.0)
+
+# Runtime
+rich>=13.0.0
+
+# Development & testing
+pytest>=7.4.0
