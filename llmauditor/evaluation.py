@@ -72,9 +72,11 @@ def _compute_stats(values: list[float]) -> StatsSummary:
 class EvaluationSession:
     """Tracks the boundaries and metadata of an evaluation session."""
 
-    def __init__(self, app_name: str, version: str, start_index: int) -> None:
+    def __init__(self, app_name: str, version: str, start_index: int,
+                 mode: str = "simulated") -> None:
         self.app_name = app_name
         self.version = version
+        self.mode = mode          # "simulated" (stub) or "live" (real API)
         self.start_time = datetime.now()
         self.end_time: Optional[datetime] = None
         self.start_index = start_index
@@ -94,6 +96,7 @@ class EvaluationSession:
         return {
             "app_name": self.app_name,
             "version": self.version,
+            "mode": self.mode,
             "start_time": self.start_time.isoformat(),
             "end_time": self.end_time.isoformat() if self.end_time else None,
             "duration_seconds": round(self.duration_seconds, 2),
@@ -325,6 +328,10 @@ class EvaluationReport:
         id_table.add_column(style="white")
         id_table.add_row("Application", sess.app_name)
         id_table.add_row("Version", sess.version)
+        mode_raw = getattr(sess, "mode", "simulated") or "simulated"
+        is_live = mode_raw.lower() in ("live", "api", "real")
+        mode_label = "With API Call" if is_live else "Without API Call"
+        id_table.add_row("Evaluation Mode", mode_label)
         id_table.add_row("Total Executions", str(m.total_runs))
         id_table.add_row("Models Used", ", ".join(m.models_used) or "N/A")
         id_table.add_row("Duration", f"{sess.duration_seconds:.1f}s")

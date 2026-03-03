@@ -326,7 +326,8 @@ class LLMAuditor:
     #  EVALUATION SESSION (NEW)
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def start_evaluation(self, app_name: str, version: str = "1.0.0") -> None:
+    def start_evaluation(self, app_name: str, version: str = "1.0.0",
+                          mode: str = "offline") -> None:
         """
         Begin an evaluation session.
 
@@ -336,17 +337,20 @@ class LLMAuditor:
         Args:
             app_name: Name of the application under evaluation.
             version:  Application version string.
+            mode:     "simulated" (stub responses) or "live" (real API calls).
         """
         try:
             self._eval_session = EvaluationSession(
                 app_name=str(app_name or "Unknown"),
                 version=str(version or "1.0.0"),
                 start_index=len(self._history),
+                mode=str(mode or "simulated"),
             )
         except Exception:
             self._eval_session = EvaluationSession(
                 app_name="Unknown", version="1.0.0",
                 start_index=len(self._history),
+                mode="simulated",
             )
 
     def end_evaluation(self) -> None:
