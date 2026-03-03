@@ -1,5 +1,5 @@
 """
-examples/chatbot_test.py — Integration test for llmcontrolengine.
+examples/chatbot_test.py — Integration test for llmsupervisor.
 
 Purpose:
     Simulate a real chatbot session using a mock LLM callable.
@@ -22,7 +22,7 @@ import os
 # Allow running from project root without installing into a global env.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from llmcontrolengine import control, BudgetExceededError, LowConfidenceError
+from llmsupervisor import supervisor, BudgetExceededError, LowConfidenceError
 
 
 # ── Mock LLM callable ─────────────────────────────────────────────────────── #
@@ -49,16 +49,17 @@ def mock_llm(prompt: str) -> dict:
 
 def configure_engine() -> None:
     """Configure governance settings for the session."""
-    control.clear_history()
+    supervisor.clear_history()
 
-    control.set_budget(1.0)                          # $1.00 session budget
-    control.set_role("analyst", max_tokens=2000)     # analyst token limit per call
-    control.assign_role("analyst")
-    control.guard_mode(True, threshold=75)           # block low-confidence results
-    control.enable_ai_summary(False)                 # use rule-based summary by default
+    supervisor.set_budget(1.0)                          # $1.00 session budget
+    supervisor.set_role("analyst", max_tokens=2000)     # analyst token limit per call
+    supervisor.assign_role("analyst")
+    supervisor.guard_mode(True, threshold=75)           # block low-confidence results
+    supervisor.enable_ai_summary(False)                 # use rule-based summary by default
+    supervisor.set_alert_mode(False)                    # strict mode — raise exceptions
 
     print("╔══════════════════════════════════════════════════╗")
-    print("║   LLMControlEngine — Chatbot Integration Test    ║")
+    print("║   LLMSupervisor — Chatbot Integration Test       ║")
     print("╠══════════════════════════════════════════════════╣")
     print("║  Budget    : $1.00                               ║")
     print("║  Role      : analyst (max 2,000 tokens/call)    ║")
@@ -91,7 +92,7 @@ def run_chat_loop() -> None:
 
         # Governance-wrapped execution
         try:
-            report = control.execute(llm=mock_llm, input_data=user_input)
+            report = supervisor.execute(llm=mock_llm, input_data=user_input)
             report.display()
             last_report = report
 
@@ -114,12 +115,12 @@ def print_session_summary(last_report) -> None:
     """Print final budget status and export the last report."""
     print()
     print("── Session Summary ─────────────────────────────────")
-    status = control.get_budget_status()
+    status = supervisor.get_budget_status()
     print(f"  Executions    : {status['executions']}")
     print(f"  Budget Used   : ${status['used_usd']:.6f} USD")
     print(f"  Budget Limit  : ${status['limit_usd']:.6f} USD")
     print(f"  Remaining     : ${status['remaining_usd']:.6f} USD")
-    print(f"  History items : {len(control.history())}")
+    print(f"  History items : {len(supervisor.history())}")
     print()
 
     if last_report is None:
@@ -157,15 +158,16 @@ def run_governance_tests() -> None:
     """
     Standalone tests for all 3 governance exceptions.
 
-    Runs in isolation using fresh ControlEngine instances so as not
+    Runs in isolation using fresh LLMSupervisor instances so as not
     to pollute the main session state.
     """
-    from llmcontrolengine.control import ControlEngine
+    from llmsupervisor.supervisor import LLMSupervisor
 
     print("── Governance Exception Tests ──────────────────────")
 
     # Test 1: BudgetExceededError
-    eng = ControlEngine()
+    eng = LLMSupervisor()
+    eng.set_alert_mode(False)  # strict mode — raise exceptions
     eng.set_budget(0.0005)  # mock with short input costs ~$0.0008 — exceeds this limit
     try:
         eng.execute(llm=mock_llm, input_data="test budget exceeded")
@@ -174,7 +176,8 @@ def run_governance_tests() -> None:
         print("  [PASS] BudgetExceededError raised correctly")
 
     # Test 2: PermissionError (role token limit)
-    eng2 = ControlEngine()
+    eng2 = LLMSupervisor()
+    eng2.set_alert_mode(False)
     eng2.set_role("restricted", max_tokens=20)  # mock produces >20 tokens
     eng2.assign_role("restricted")
     try:
@@ -192,7 +195,8 @@ def run_governance_tests() -> None:
             "model": "gpt-4o",
         }
 
-    eng3 = ControlEngine()
+    eng3 = LLMSupervisor()
+    eng3.set_alert_mode(False)
     eng3.guard_mode(True, threshold=85)
     try:
         eng3.execute(llm=heavy_llm, input_data="test guard mode")
@@ -201,13 +205,13 @@ def run_governance_tests() -> None:
         print("  [PASS] LowConfidenceError raised correctly")
 
     # Test 4: AI summary toggle (rule-based vs injected)
-    eng4 = ControlEngine()
+    eng4 = LLMSupervisor()
     eng4.enable_ai_summary(False)
     r = eng4.execute(llm=mock_llm, input_data="ai summary disabled test")
     assert r.ai_summary is None, "Expected ai_summary=None when disabled"
     print("  [PASS] AI summary disabled — rule-based fallback confirmed")
 
-    eng5 = ControlEngine()
+    eng5 = LLMSupervisor()
     eng5.enable_ai_summary(True)   # reuses mock_llm callable in execute
     r2 = eng5.execute(llm=mock_llm, input_data="ai summary enabled test")
     # mock_llm returns "Echo: ...", which is a valid response string

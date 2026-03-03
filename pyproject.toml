@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llmcontrolengine"
+name = "llmsupervisor"
 version = "0.1.0"
-description = "LLMControlEngine — AI Governance, Audit & Execution Control Framework for Generative AI Applications."
+description = "LLMSupervisor — Independent Audit & Governance Layer for Production GenAI Systems."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -42,4 +42,4 @@ Issues = "https://github.com/yourusername/llm-control-engine/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["llmcontrolengine*"]
+include = ["llmsupervisor*"]
