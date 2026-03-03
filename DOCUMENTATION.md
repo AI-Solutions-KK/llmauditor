@@ -1251,17 +1251,12 @@ print(f"AI Reasoning: {hal.ai_judge_reasoning}")
 ```python
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from llmauditor import auditor, LLMAuditor
+from llmauditor import auditor
 
 app = FastAPI()
 
-# Option 1: Use the global singleton
 auditor.set_budget(10.00)
-
-# Option 2: Create a dedicated instance per use case
-api_auditor = LLMAuditor()
-api_auditor.set_budget(5.00)
-api_auditor.set_alert_mode(True)
+auditor.set_alert_mode(True)
 
 class QueryRequest(BaseModel):
     question: str
@@ -1276,7 +1271,7 @@ async def ask(request: QueryRequest):
     answer, input_tokens, output_tokens = your_llm_call(request.question)
 
     # Audit the execution
-    report = api_auditor.execute(
+    report = auditor.execute(
         model="gpt-4o",
         input_tokens=input_tokens,
         output_tokens=output_tokens,
@@ -1289,28 +1284,25 @@ async def ask(request: QueryRequest):
         audit=report.to_dict()
     )
 
-# Audit endpoint — get evaluation report
+# Audit endpoint — get budget status
 @app.get("/audit/status")
 async def audit_status():
-    return api_auditor.get_budget_status()
+    return auditor.get_budget_status()
 
 @app.post("/audit/evaluate")
 async def run_evaluation():
     """Generate certification report from all recorded executions."""
-    api_auditor.start_evaluation("My FastAPI App", version="1.0.0")
-    # Use existing history
-    api_auditor._eval_session.start_index = 0
-    api_auditor.end_evaluation()
-    report = api_auditor.generate_evaluation_report()
+    auditor.start_evaluation("My FastAPI App", version="1.0.0")
+    auditor.end_evaluation()
+    report = auditor.generate_evaluation_report()
     return report.to_dict()
 
 @app.get("/audit/export")
 async def export_report():
     """Export certification PDF."""
-    api_auditor.start_evaluation("My FastAPI App", version="1.0.0")
-    api_auditor._eval_session.start_index = 0
-    api_auditor.end_evaluation()
-    report = api_auditor.generate_evaluation_report()
+    auditor.start_evaluation("My FastAPI App", version="1.0.0")
+    auditor.end_evaluation()
+    report = auditor.generate_evaluation_report()
     paths = report.export_all(output_dir="./reports")
     return paths
 ```
@@ -1321,12 +1313,11 @@ async def export_report():
 
 ```python
 from flask import Flask, request, jsonify
-from llmauditor import LLMAuditor
+from llmauditor import auditor
 
 app = Flask(__name__)
-audit = LLMAuditor()
-audit.set_budget(5.00)
-audit.set_alert_mode(True)
+auditor.set_budget(5.00)
+auditor.set_alert_mode(True)
 
 @app.route("/ask", methods=["POST"])
 def ask():
@@ -1337,7 +1328,7 @@ def ask():
     answer, in_tok, out_tok = your_llm_call(question)
 
     # Audit
-    report = audit.execute(
+    report = auditor.execute(
         model="gpt-4o",
         input_tokens=in_tok,
         output_tokens=out_tok,
@@ -1354,7 +1345,7 @@ def ask():
 
 @app.route("/audit/budget", methods=["GET"])
 def budget():
-    return jsonify(audit.get_budget_status())
+    return jsonify(auditor.get_budget_status())
 ```
 
 ---
@@ -1366,11 +1357,10 @@ def budget():
 import json
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
-from llmauditor import LLMAuditor
+from llmauditor import auditor
 
-audit = LLMAuditor()
-audit.set_budget(10.00)
-audit.set_alert_mode(True)
+auditor.set_budget(10.00)
+auditor.set_alert_mode(True)
 
 @require_POST
 def ask_view(request):
@@ -1380,7 +1370,7 @@ def ask_view(request):
     # Your LLM call
     answer, in_tok, out_tok = your_llm_call(question)
 
-    report = audit.execute(
+    report = auditor.execute(
         model="gpt-4o",
         input_tokens=in_tok,
         output_tokens=out_tok,
@@ -1400,14 +1390,9 @@ def ask_view(request):
 
 ```python
 import streamlit as st
-from llmauditor import LLMAuditor
+from llmauditor import auditor
 
-# Create auditor (persists across reruns via session state)
-if "auditor" not in st.session_state:
-    st.session_state.auditor = LLMAuditor()
-    st.session_state.auditor.set_budget(1.00)
-
-audit = st.session_state.auditor
+auditor.set_budget(1.00)
 
 st.title("AI Chat with Auditing")
 
@@ -1416,7 +1401,7 @@ if prompt:
     # Your LLM call
     answer, in_tok, out_tok = your_llm_call(prompt)
 
-    report = audit.execute(
+    report = auditor.execute(
         model="gpt-4o",
         input_tokens=in_tok,
         output_tokens=out_tok,
@@ -1433,7 +1418,7 @@ if prompt:
         if report.hallucination:
             st.metric("Hallucination Risk", report.hallucination.risk_level)
 
-        status = audit.get_budget_status()
+        status = auditor.get_budget_status()
         st.progress(status["cumulative_cost"] / status["budget_limit"])
         st.caption(f"${status['cumulative_cost']:.4f} / ${status['budget_limit']:.2f}")
 ```
@@ -1668,16 +1653,17 @@ A: No. Every module has error isolation. Internal errors produce warnings, not c
 A: Cost shows as `$0.00`. Everything else still works. Use `set_pricing_table()` to add your model's pricing.
 
 **Q: Can I use multiple auditor instances?**  
-A: Yes. `from llmauditor import auditor` gives you a pre-made singleton. Create more with `LLMAuditor()`:
+A: Yes. `from llmauditor import auditor` gives you a pre-made singleton. You can also create additional instances if needed:
 
 ```python
-from llmauditor import LLMAuditor
+from llmauditor import auditor
 
-prod_auditor = LLMAuditor()
-prod_auditor.set_budget(10.00)
+# Use the singleton for most cases
+auditor.set_budget(10.00)
 
-dev_auditor = LLMAuditor()
-dev_auditor.set_budget(1.00)
+# For separate tracking, clear and reconfigure:
+auditor.clear_history()
+auditor.set_budget(1.00)
 ```
 
 **Q: Can I reset between evaluation sessions?**  
@@ -1692,7 +1678,7 @@ auditor.start_evaluation("New Session", version="2.0.0")
 A: Python 3.9 and above (3.9, 3.10, 3.11, 3.12, 3.13).
 
 **Q: Is it thread-safe?**  
-A: Each `LLMAuditor()` instance has its own state. For multi-threaded apps, create one instance per thread or use locking.
+A: The `auditor` singleton has its own state. For multi-threaded apps, use separate `auditor` instances per thread or use locking.
 
 ---
 
