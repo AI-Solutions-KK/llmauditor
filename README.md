@@ -1,6 +1,6 @@
 # LLMAuditor
 
-[![PyPI version](https://img.shields.io/badge/pypi-v1.1.4-blue.svg)](https://pypi.org/project/llmauditor/)
+[![PyPI version](https://img.shields.io/badge/pypi-v1.1.5-blue.svg)](https://pypi.org/project/llmauditor/)
 [![Python Versions](https://img.shields.io/badge/python-3.9%2B-brightgreen.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
