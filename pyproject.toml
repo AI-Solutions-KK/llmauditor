@@ -4,44 +4,68 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llmauditor"
-version = "1.1.0"
-description = "LLMAuditor — Execution-Based GenAI Application Evaluation & Certification Framework. Audit, track, and certify any LLM/GenAI/Agentic AI application with cost tracking, hallucination detection, and governance enforcement."
+version = "1.1.1"
+description = "Execution-Based GenAI Application Evaluation & Certification Framework"
 readme = "README.md"
 requires-python = ">=3.9"
-license = "MIT"
+
+license = {text = "Apache-2.0"}
+
+authors = [
+  {name = "Karan Tatyaso Kamble", email = "aisolutionsprojects@gmail.com"}
+]
+
+maintainers = [
+  {name = "Karan Tatyaso Kamble"}
+]
+
 keywords = [
-    "llm",
-    "ai-governance",
-    "audit",
-    "token-tracking",
-    "cost-estimation",
-    "generative-ai",
-    "execution-control",
-    "hallucination-detection",
-    "certification",
-    "agentic-ai",
-    "openai",
-    "langchain",
-    "anthropic",
-    "gemini",
-    "llm-evaluation",
-    "ai-safety",
-    "mlops",
+  "llm",
+  "genai",
+  "llmaudit",
+  "llm-evaluation",
+  "ai-governance",
+  "hallucination-detection",
+  "genai-monitoring",
+  "ai-certification",
+  "machine-learning",
+  "artificial-intelligence",
+  "ai-audit",
+  "ai-auditing",
+  "llm-audit",
+  "ai-compliance",
+  "ai-monitoring",
+  "ai-testing",
+  "llm-testing",
+  "ai-validation",
+  "genai-audit",
+  "llm-governance",
+  "ai-risk",
+  "ai-assessment",
+  "llm-compliance",
+  "audit",
+  "token-tracking",
+  "cost-estimation",
+  "generative-ai",
+  "execution-control",
+  "certification",
+  "agentic-ai",
+  "openai",
+  "langchain",
+  "anthropic",
+  "gemini",
+  "ai-safety",
+  "mlops"
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: Software Development :: Quality Assurance",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Developers",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: Software Development :: Testing"
 ]
 
 dependencies = [
@@ -51,10 +75,8 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/AI-Solutions-KK/llmauditor"
-Documentation = "https://github.com/AI-Solutions-KK/llmauditor/blob/main/DOCUMENTATION.md"
 Repository = "https://github.com/AI-Solutions-KK/llmauditor"
 Issues = "https://github.com/AI-Solutions-KK/llmauditor/issues"
-Changelog = "https://github.com/AI-Solutions-KK/llmauditor/releases"
 
 [tool.setuptools.packages.find]
 where = ["."]

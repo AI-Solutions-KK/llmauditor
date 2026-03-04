@@ -1,7 +1,7 @@
 # LLMAuditor — Complete Usage Documentation
 
 > **Version:** 1.1.0  
-> **License:** MIT  
+> **License:** Apache-2.0  
 > **Python:** ≥ 3.9  
 > **Install:** `pip install llmauditor`
 
@@ -1752,4 +1752,4 @@ print(f"\nBudget: ${status['cumulative_cost']:.4f} / ${status['budget_limit']:.2
 
 ---
 
-*LLMAuditor v1.1.0 — MIT License — [GitHub](https://github.com/AI-Solutions-KK/llmauditor)*
+*LLMAuditor v1.1.0 — Apache-2.0 License — [GitHub](https://github.com/AI-Solutions-KK/llmauditor)*
