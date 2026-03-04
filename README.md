@@ -1,4 +1,5 @@
 # LLMAuditor
+Release v1.0.0 — LLMAuditor evaluation & certification framework
 
 **Execution-Based GenAI Application Evaluation & Certification Framework.**
 
