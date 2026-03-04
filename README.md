@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
 <div align="center">
-<img src="images/certification_Multi-Agent_Research_Assistant_(Error_Version)_20260305_043053_page-0001.jpg" alt="LLMAuditor Platinum Certification" width="400">
+<img src="https://raw.githubusercontent.com/AI-Solutions-KK/llmauditor/main/images/certification_Multi-Agent_Research_Assistant_(Error_Version)_20260305_043053_page-0001.jpg" alt="LLMAuditor Platinum Certification" width="400">
 </div>
 
 **Execution-Based GenAI Application Evaluation & Certification Framework.**
@@ -68,12 +68,12 @@ The goal is to help organizations **validate, evaluate, and certify GenAI applic
 Our **Multi-Agent Research System** demonstrates LLMAuditor's enterprise-grade certification capabilities:
 
 <div align="center">
-<img src="images/certification_Multi-Agent_Research_Assistant_(Error_Version)_20260305_043053_page-0001.jpg" alt="LLMAuditor Certification Report - Top Page with Stamp" width="600">
+<img src="https://raw.githubusercontent.com/AI-Solutions-KK/llmauditor/main/images/certification_Multi-Agent_Research_Assistant_(Error_Version)_20260305_043053_page-0001.jpg" alt="LLMAuditor Certification Report - Top Page with Stamp" width="600">
 <p><em>Certification report header with official stamp and executive summary</em></p>
 </div>
 
 <div align="center">
-<img src="images/certification_Multi-Agent_Research_Assistant_(Error_Version)_20260305_043053_page-0004.jpg" alt="LLMAuditor Certification Report - Digital Signature Page" width="600">
+<img src="https://raw.githubusercontent.com/AI-Solutions-KK/llmauditor/main/images/certification_Multi-Agent_Research_Assistant_(Error_Version)_20260305_043053_page-0004.jpg" alt="LLMAuditor Certification Report - Digital Signature Page" width="600">
 <p><em>Digital signature page with certificate number and validation details</em></p>
 </div>
 
