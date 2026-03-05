@@ -1,19 +1,18 @@
 # LLMAuditor
 
-[![PyPI version](https://img.shields.io/badge/pypi-v1.1.5-blue.svg)](https://pypi.org/project/llmauditor/)
+[![PyPI version](https://img.shields.io/badge/pypi-v1.1.6-blue.svg)](https://pypi.org/project/llmauditor/)
 [![Python Versions](https://img.shields.io/badge/python-3.9%2B-brightgreen.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/AI-Solutions-KK/llmauditor/main/images/certification_Multi-Agent_Research_Assistant_(Error_Version)_20260305_043053_page-0001.jpg" alt="LLMAuditor Platinum Certification" width="400">
+<img src="images/snap-1.png" alt="LLMAuditor Terminal Interface" width="400">
 </div>
 
 **Execution-Based GenAI Application Evaluation & Certification Framework.**
 
 LLMAuditor wraps around any LLM integration to provide per-execution auditing, hallucination detection, cost governance, certification scoring, and enterprise-grade report export — without locking you into any specific AI provider.
 
-**🏆 Proven in Production:** Now deployed in real applications including multi-agent research systems, daily news apps, RAG pipelines, and chatbot 
-monitors 
+**🏆 Proven in Production:** Now deployed in real applications including multi-agent research systems, daily news apps, RAG pipelines, chatbot monitors, and terminal assistants 
 
 ---
 
@@ -23,6 +22,7 @@ monitors
 - [AI News App Production ](https://github.com/AI-Solutions-KK/AI-Powered-Daily-News-App-with-LLMAuditor)
 - [RAG Pipeline Auditing](https://github.com/AI-Solutions-KK/llmauditor-rag-audit)
 - [Chatbot Monitoring](https://github.com/AI-Solutions-KK/Chatbot-Monitor-llmauditor)
+- [GenAI-Assistant-with-LLMAuditor-Integration](https://github.com/AI-Solutions-KK/GenAI-Assistant-with-LLMAuditor-Integration)
 
 ---
 
@@ -62,6 +62,7 @@ The goal is to help organizations **validate, evaluate, and certify GenAI applic
 | **📰 AI-Powered Daily News App** | News aggregation, AI summarization, and personalized briefings | **Platinum Certification (92.3%)** | [View Project](https://github.com/AI-Solutions-KK/AI-Powered-Daily-News-App-with-LLMAuditor) |
 | **🔍 RAG Pipeline Auditor** | HR knowledge base with document retrieval and quality monitoring | **Platinum Certification (91.0%)** | [View Project](https://github.com/AI-Solutions-KK/llmauditor-rag-audit) |
 | **💬 Chatbot Monitor** | Interactive chatbot with governance controls and safety testing | **Silver Certification (71.2%)** | [View Project](https://github.com/AI-Solutions-KK/Chatbot-Monitor-llmauditor) |
+| **🤖 GenAI-Assistant-with-LLMAuditor-Integration** | Simple conversational AI with FREE Google Gemini and real-time audit tracking | **Platinum Certification (98.5%)** | [View Project](https://github.com/AI-Solutions-KK/GenAI-Assistant-with-LLMAuditor-Integration) |
 
 ### 🏆 Proven Capabilities - Real Certification Report
 
