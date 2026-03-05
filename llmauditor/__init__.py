@@ -61,4 +61,4 @@ __all__ = [
     "export_certification_all",
 ]
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
