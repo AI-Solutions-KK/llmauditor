@@ -16,7 +16,7 @@ import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from llmauditor.report import ExecutionReport
 from llmauditor.scoring import ScoringEngine, CertificationScore
@@ -35,7 +35,15 @@ class StatsSummary:
     total: float = 0.0
     count: int = 0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert statistics summary to dictionary format.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary with rounded statistical values.
+        """
         return {
             "mean": round(self.mean, 6),
             "stddev": round(self.stddev, 6),
@@ -46,8 +54,20 @@ class StatsSummary:
         }
 
 
-def _compute_stats(values: list[float]) -> StatsSummary:
-    """Compute stats from a list of numeric values."""
+def _compute_stats(values: List[float]) -> StatsSummary:
+    """
+    Compute descriptive statistics from a list of numeric values.
+
+    Parameters
+    ----------
+    values : List[float]
+        List of numeric values to analyze.
+
+    Returns
+    -------
+    StatsSummary
+        Statistical summary including mean, stddev, min, max, total, and count.
+    """
     if not values:
         return StatsSummary()
 
@@ -229,49 +249,209 @@ class EvaluationReport:
     """
     Complete evaluation session report with scoring and certification.
 
-    Contains:
-        - Session metadata (app name, version, time range)
-        - Aggregated metrics
-        - Certification score and level
-        - Improvement suggestions
-        - Individual execution reports
+    This class represents the comprehensive results of an evaluation session,
+    containing aggregated metrics, certification scoring, governance compliance
+    analysis, and actionable improvement recommendations.
 
-    Sections (for certification report):
-        1. Application Identity
-        2. Evaluation Summary
-        3. Metrics & Distributions
-        4. Hallucination Analysis
-        5. Governance Compliance
-        6. Stability Analysis
-        7. Scoring Breakdown
-        8. Certification Verdict
-        9. Improvement Recommendations
-        10. Integrity Hash
+    Attributes
+    ----------
+    session : EvaluationSession
+        Session metadata including app name, version, and time boundaries.
+    metrics : EvaluationMetrics
+        Aggregated statistical metrics across all executions in the session.
+    score : CertificationScore
+        Computed certification score with overall rating and subscores.
+    suggestions : List[Suggestion]
+        List of improvement recommendations based on analysis results.
+    execution_reports : List[ExecutionReport]
+        Individual execution reports that contributed to this evaluation.
+
+    Methods
+    -------
+    display()
+        Render a rich CLI certification summary with key findings.
+    export(fmt="pdf", output_dir=".")
+        Export the certification report to a file.
+    export_all(output_dir=".")
+        Export in all supported formats (md, html, pdf).
+    to_dict()
+        Convert the report to a dictionary for serialization.
+
+    Notes
+    -----
+    The evaluation report provides:
+    
+    1. **Application Identity**: App name, version, evaluation metadata
+    2. **Evaluation Summary**: High-level findings and certification level
+    3. **Metrics & Distributions**: Statistical analysis of performance
+    4. **Hallucination Analysis**: Risk assessment and detection results
+    5. **Governance Compliance**: Budget and guard mode violation tracking
+    6. **Stability Analysis**: Performance consistency and reliability
+    7. **Scoring Breakdown**: Detailed scoring methodology and weights
+    8. **Certification Verdict**: Final certification level and rationale
+    9. **Improvement Recommendations**: Actionable suggestions for enhancement
+    10. **Integrity Hash**: Cryptographic verification of report authenticity
+
+    Certification levels range from Platinum (≥90) to Fail (<60), with
+    specific criteria for each level based on execution-based metrics.
+
+    Examples
+    --------
+    Generate and display evaluation report:
+
+    >>> auditor.start_evaluation("My App", version="1.0.0")
+    >>> # ... run multiple executions ...
+    >>> auditor.end_evaluation()
+    >>> report = auditor.generate_evaluation_report()
+    >>> report.display()
+    >>> 
+    >>> # Export comprehensive report
+    >>> paths = report.export_all("./reports")
+    >>> print(f"Reports saved: {paths}")
+
+    Access specific metrics:
+
+    >>> print(f"Overall Score: {report.score.overall}")
+    >>> print(f"Certification: {report.score.level}")
+    >>> print(f"Total Executions: {report.metrics.execution_count}")
+    >>> print(f"Average Cost: ${report.metrics.cost_stats.mean:.4f}")
     """
 
     session: EvaluationSession
     metrics: EvaluationMetrics
     score: CertificationScore
-    suggestions: list[Suggestion]
-    execution_reports: list[ExecutionReport]
+    suggestions: List[Suggestion]
+    execution_reports: List[ExecutionReport]
 
     def export(self, fmt: str = "pdf", output_dir: str = ".") -> str:
-        """Export the certification report (md, html, or pdf)."""
+        """
+        Export the certification report to a file.
+
+        Generates a comprehensive certification report file containing
+        all evaluation results, metrics, scoring breakdown, and
+        improvement recommendations.
+
+        Parameters
+        ----------
+        fmt : str, default="pdf"
+            Output format. Supported formats:
+            - "md" : Markdown format
+            - "html" : HTML format
+            - "pdf" : PDF format (recommended for official reports)
+        output_dir : str, default="."
+            Directory path where the report file will be saved.
+            Directory will be created if it doesn't exist.
+
+        Returns
+        -------
+        str
+            Path to the exported certification report file,
+            or error message if export failed.
+
+        Notes
+        -----
+        The certification report includes:
+        - Executive summary with certification verdict
+        - Detailed metrics analysis and distributions
+        - Hallucination risk assessment
+        - Governance compliance tracking
+        - Scoring methodology and breakdown
+        - Actionable improvement recommendations
+        - Integrity verification hash
+
+        PDF format is recommended for official certification
+        documents and compliance purposes.
+
+        Examples
+        --------
+        Export official certification report:
+
+        >>> pdf_path = report.export("pdf", "./certifications")
+        >>> print(f"Official report: {pdf_path}")
+        """
         try:
             from llmauditor.exporter import export_certification
             return export_certification(self, fmt, output_dir)
         except Exception as exc:
             return f"Export failed: {exc}"
 
-    def export_all(self, output_dir: str = ".") -> dict[str, str]:
-        """Export in all three formats (md, html, pdf). Returns {fmt: path}."""
+    def export_all(self, output_dir: str = ".") -> Dict[str, str]:
+        """
+        Export certification report in all supported formats.
+
+        Convenience method that generates the certification report
+        in Markdown, HTML, and PDF formats simultaneously.
+
+        Parameters
+        ----------
+        output_dir : str, default="."
+            Directory path where the report files will be saved.
+            Directory will be created if it doesn't exist.
+
+        Returns
+        -------
+        Dict[str, str]
+            Dictionary mapping format names to file paths:
+            {"md": "path/to/file.md", "html": "path/to/file.html", "pdf": "path/to/file.pdf"}
+            If export fails, error messages are returned instead of paths.
+
+        Notes
+        -----
+        This method is useful for generating multiple report formats
+        for different stakeholders:
+        - MD: For developers and version control
+        - HTML: For web viewing and sharing
+        - PDF: For official documentation and compliance
+
+        Examples
+        --------
+        Export all formats:
+
+        >>> paths = report.export_all("./reports")
+        >>> for fmt, path in paths.items():
+        ...     print(f"{fmt.upper()}: {path}")
+        """
         try:
             from llmauditor.exporter import export_certification_all
             return export_certification_all(self, output_dir)
         except Exception as exc:
             return {"md": f"ERROR: {exc}", "html": f"ERROR: {exc}", "pdf": f"ERROR: {exc}"}
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert the evaluation report to a dictionary for serialization.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary containing all evaluation results including:
+            - Session metadata (app name, version, timestamps)
+            - Aggregated metrics and statistical distributions
+            - Certification score and level breakdown
+            - Improvement suggestions list
+            - Execution count summary
+
+        Notes
+        -----
+        This method provides a structured representation of the complete
+        evaluation results suitable for:
+        - JSON serialization
+        - API responses
+        - Database storage
+        - External system integration
+
+        Individual execution reports are summarized by count only
+        to keep the output manageable.
+
+        Examples
+        --------
+        Get evaluation data as dictionary:
+
+        >>> data = report.to_dict()
+        >>> print(f"App: {data['session']['app_name']}")
+        >>> print(f"Score: {data['score']['overall']}")
+        >>> print(f"Level: {data['score']['level']}")
+        """
         return {
             "session": self.session.to_dict(),
             "metrics": self.metrics.to_dict(),
@@ -281,7 +461,39 @@ class EvaluationReport:
         }
 
     def display(self) -> None:
-        """Render a rich CLI certification summary."""
+        """
+        Render a rich CLI certification summary.
+
+        Displays a comprehensive certification report in the terminal
+        including overall score, certification level, key metrics,
+        and improvement recommendations using Rich formatting.
+
+        The display includes:
+        - Certification verdict with visual styling
+        - Key performance metrics summary
+        - Governance compliance status
+        - Quality assessment indicators
+        - Actionable improvement suggestions
+
+        Notes
+        -----
+        This method is designed to be safe and will never crash the host
+        application. If any display error occurs, it will either show a
+        minimal error message or fail silently.
+
+        The display uses color coding and formatting to highlight:
+        - Certification levels (Platinum/Gold/Silver/etc.)
+        - Performance indicators (Good/Warning/Critical)
+        - Compliance status (Pass/Warning/Fail)
+
+        Examples
+        --------
+        Display certification summary:
+
+        >>> report = auditor.generate_evaluation_report()
+        >>> report.display()
+        # Shows formatted certification panel in terminal
+        """
         try:
             self._display_impl()
         except Exception as exc:

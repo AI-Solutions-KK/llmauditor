@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import functools
 import uuid
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from llmauditor.cost import calculate_cost, set_pricing_table as _set_pricing
 from llmauditor.evaluation import (
@@ -47,22 +47,65 @@ class LLMAuditor:
     """
     Execution-Based GenAI Application Evaluation & Certification Framework.
 
-    Wraps around any LLM integration to provide:
-      - Per-execution auditing with cost, token, latency tracking
-      - Hallucination risk detection (rule-based + optional AI judge)
-      - Budget and governance enforcement
-      - Evaluation sessions with certification scoring
+    Wraps around any LLM integration to provide per-execution auditing with
+    cost tracking, token usage monitoring, hallucination detection, governance
+    enforcement, and certification scoring for comprehensive evaluation.
 
-    Usage:
-        from llmauditor import auditor
+    Attributes
+    ----------
+    _history : List[ExecutionReport]
+        List of all execution reports recorded by this auditor instance.
+    _cumulative_cost : float
+        Running total of estimated costs across all executions.
+    _budget_limit : Optional[float]
+        Maximum allowed cumulative cost in USD (None = no limit).
+    _guard_threshold : Optional[int]
+        Minimum confidence score required for execution (None = disabled).
+    _alert_mode : bool
+        If True, governance violations trigger warnings instead of exceptions.
+    _role : Optional[str]
+        Current role context for governance enforcement.
+    _ai_summary_enabled : bool
+        Whether to generate AI summaries for execution reports.
+    _ai_summary_fn : Optional[Callable]
+        Custom function for generating AI summaries.
+    _hallucination_detector : HallucinationDetector
+        Instance for detecting hallucination risks in LLM outputs.
+    _eval_session : Optional[EvaluationSession]
+        Current evaluation session if one is active.
+    _scoring_engine : ScoringEngine
+        Engine for computing certification scores.
+    _suggestion_engine : SuggestionEngine
+        Engine for generating improvement suggestions.
 
-        @auditor.monitor(model="gpt-4o")
-        def my_llm_call(prompt):
-            ...
+    Examples
+    --------
+    Basic usage with decorator:
 
-        # Or manual recording:
-        report = auditor.execute(model="gpt-4o", input_tokens=100,
-                                  output_tokens=50, raw_response="...")
+    >>> from llmauditor import auditor
+    >>> @auditor.monitor(model="gpt-4o")
+    ... def my_llm_call(prompt: str) -> dict:
+    ...     # Your LLM integration here
+    ...     return {"response": "...", "input_tokens": 100, "output_tokens": 50}
+
+    Manual execution recording:
+
+    >>> report = auditor.execute(
+    ...     model="gpt-4o-mini",
+    ...     input_tokens=100,
+    ...     output_tokens=50,
+    ...     raw_response="Sample response",
+    ...     input_text="Sample prompt"
+    ... )
+    >>> report.display()
+
+    Evaluation session:
+
+    >>> auditor.start_evaluation("My App", version="1.0.0")
+    >>> # ... run multiple executions ...
+    >>> auditor.end_evaluation()
+    >>> report = auditor.generate_evaluation_report()
+    >>> report.export("pdf", "./reports")
     """
 
     def __init__(self) -> None:
@@ -94,11 +137,34 @@ class LLMAuditor:
 
     def set_budget(self, max_cost_usd: float) -> None:
         """
-        Set a cumulative cost budget (USD).
+        Set a cumulative cost budget limit in USD.
 
-        Once total cost across all executions exceeds this limit:
-          - In normal mode → raises BudgetExceededError
-          - In alert mode  → adds a [BUDGET] warning to the report
+        Once the total cost across all executions exceeds this limit,
+        subsequent executions will either raise BudgetExceededError
+        (normal mode) or generate warnings (alert mode).
+
+        Parameters
+        ----------
+        max_cost_usd : float
+            Maximum allowed cumulative cost in USD.
+            Must be a positive number.
+
+        Notes
+        -----
+        Budget enforcement behavior depends on the current mode:
+        - Normal mode: Raises BudgetExceededError when exceeded
+        - Alert mode: Logs warning and continues execution
+
+        The budget applies to the cumulative cost of all executions
+        recorded by this auditor instance since initialization or
+        since the last call to clear_history().
+
+        Examples
+        --------
+        Set a $10 budget:
+
+        >>> auditor.set_budget(10.0)
+        >>> # Now all executions will be monitored against this budget
         """
         self._budget_limit = max_cost_usd
 
@@ -115,29 +181,121 @@ class LLMAuditor:
 
     def guard_mode(self, confidence_threshold: int = 80) -> None:
         """
-        Enable guard mode — block executions below the confidence threshold.
+        Enable guard mode with minimum confidence threshold for execution approval.
 
-        In normal mode: raises LowConfidenceError.
-        In alert mode:  adds a [GUARD MODE] warning instead.
+        Executions with confidence scores below this threshold will either
+        raise LowConfidenceError (normal mode) or generate warnings
+        (alert mode).
+
+        Parameters
+        ----------
+        confidence_threshold : int, default=80
+            Minimum confidence score (0-100) required for execution approval.
+            Confidence scores are computed based on response quality,
+            hallucination risk, and other factors.
+
+        Notes
+        -----
+        Guard mode enforcement behavior:
+        - Normal mode: Raises LowConfidenceError for low-confidence executions
+        - Alert mode: Adds [GUARD MODE] warning and allows execution to continue
+
+        Confidence score ranges:
+        - 85+ : High confidence
+        - 70-84: Medium confidence
+        - Below 70: Low confidence
+
+        Examples
+        --------
+        Enable guard mode with 85% confidence requirement:
+
+        >>> auditor.guard_mode(85)
+        >>> # Now executions below 85% confidence will be blocked/warned
         """
         self._guard_threshold = confidence_threshold
 
     def set_alert_mode(self, enabled: bool = True) -> None:
         """
-        Toggle alert mode.
+        Toggle alert mode for governance enforcement.
 
-        When enabled, governance violations (budget, guard) produce warnings
-        on the report instead of raising exceptions. This allows execution
-        to continue while still flagging issues.
+        When enabled, governance violations (budget exceeded, guard mode
+        triggered) produce warnings on the report instead of raising
+        exceptions. This allows execution to continue while still
+        flagging policy violations for review.
+
+        Parameters
+        ----------
+        enabled : bool, default=True
+            If True, enables alert mode (warnings instead of exceptions).
+            If False, disables alert mode (exceptions raised on violations).
+
+        Notes
+        -----
+        Alert mode affects the following governance features:
+        - Budget enforcement: Warns instead of raising BudgetExceededError
+        - Guard mode: Warns instead of raising LowConfidenceError
+
+        This is useful for monitoring and compliance tracking without
+        disrupting production workflows.
+
+        Examples
+        --------
+        Enable alert mode for production monitoring:
+
+        >>> auditor.set_alert_mode(True)
+        >>> auditor.set_budget(5.0)
+        >>> # Budget violations will now warn instead of crash
         """
         self._alert_mode = enabled
 
     def set_role(self, role: str) -> None:
-        """Assign a governance role label to this auditor instance."""
+        """
+        Set the current role context for governance enforcement.
+
+        Role-based governance allows different execution policies
+        based on the user or system context. This can be used to
+        implement different budget limits, guard thresholds, or
+        other policy variations.
+
+        Parameters
+        ----------
+        role : str
+            Role identifier (e.g., "developer", "production", "admin").
+            The role context is stored and may influence governance
+            decisions and reporting.
+
+        Notes
+        -----
+        Role context is used for:
+        - Governance policy differentiation
+        - Audit trail attribution  
+        - Compliance reporting
+
+        The role is included in execution reports for tracking
+        and audit purposes.
+
+        Examples
+        --------
+        Set role for different environments:
+
+        >>> auditor.set_role("production")
+        >>> # Role context now applied to all executions
+        """
         self._role = role
 
     def assign_role(self, role: str) -> None:
-        """Alias for set_role()."""
+        """
+        Alias for set_role() method.
+
+        Parameters
+        ----------
+        role : str
+            Role identifier to assign to this auditor instance.
+
+        See Also
+        --------
+        set_role : Main method for setting role context.
+        """
         self.set_role(role)
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -172,25 +330,65 @@ class LLMAuditor:
         input_text: str = "",
     ) -> ExecutionReport:
         """
-        Record a completed LLM execution and produce an audit report.
+        Execute an audit record for an LLM interaction.
 
-        This is for manual recording — the LLM call has already happened.
-        Does NOT auto-display; call report.display() if desired.
+        This function records metadata about a completed LLM call and generates
+        a comprehensive execution report including token usage, estimated cost,
+        confidence score, hallucination signals, and governance checks.
 
-        Args:
-            model:          Model identifier (e.g. "gpt-4o").
-            input_tokens:   Prompt/input token count.
-            output_tokens:  Completion/output token count.
-            raw_response:   The text response from the LLM.
-            execution_time: Elapsed seconds (optional).
-            input_text:     The original prompt/input (for hallucination analysis).
+        Parameters
+        ----------
+        model : str
+            Name of the LLM model used (e.g., "gpt-4o-mini", "claude-3-sonnet").
+        input_tokens : int
+            Number of tokens sent to the model as input/prompt.
+        output_tokens : int
+            Number of tokens returned by the model in the response.
+        raw_response : str
+            Raw text response returned by the LLM.
+        execution_time : Optional[float], default=None
+            Execution time in seconds. If None, defaults to 0.0.
+        input_text : str, default=""
+            Original prompt or user request sent to the model.
+            Used for hallucination analysis and quality assessment.
 
-        Returns:
-            ExecutionReport with full audit data.
+        Returns
+        -------
+        ExecutionReport
+            Structured audit report containing evaluation metrics,
+            cost estimation, governance checks, and quality assessment.
 
-        Raises:
-            BudgetExceededError: If cumulative cost exceeds budget (normal mode).
-            LowConfidenceError:  If confidence below guard threshold (normal mode).
+        Raises
+        ------
+        BudgetExceededError
+            If cumulative cost exceeds the configured budget limit
+            (only in normal mode, not alert mode).
+        LowConfidenceError
+            If confidence score is below guard threshold
+            (only in normal mode, not alert mode).
+
+        Notes
+        -----
+        This method is for manual recording of completed LLM executions.
+        The LLM call should have already happened. For automatic monitoring,
+        use the `monitor` decorator instead.
+
+        The report is not automatically displayed. Call `report.display()`
+        if you want to see the audit panel.
+
+        Examples
+        --------
+        Record a completed OpenAI API call:
+
+        >>> report = auditor.execute(
+        ...     model="gpt-4o-mini",
+        ...     input_tokens=100,
+        ...     output_tokens=50,
+        ...     raw_response="The weather is sunny today.",
+        ...     execution_time=1.2,
+        ...     input_text="What's the weather like?"
+        ... )
+        >>> report.display()
         """
         try:
             return self._build_report(
@@ -217,13 +415,58 @@ class LLMAuditor:
         execution_time: float = 0.0,
     ) -> ExecutionReport:
         """
-        Observe and audit an already-completed execution.
+        Observe and audit an already-completed LLM execution.
 
-        Similar to execute() but explicitly takes input/output text pair.
-        Auto-displays the audit panel.
+        Similar to execute() but takes explicit input/output text pairs and
+        automatically displays the audit panel. This method is designed for
+        observing executions that have already been completed.
 
-        Returns:
-            ExecutionReport with hallucination analysis attached.
+        Parameters
+        ----------
+        model : str
+            Name of the LLM model used (e.g., "gpt-4o", "claude-3-haiku").
+        input_text : str
+            Original prompt or user request sent to the model.
+        output_text : str
+            Text response returned by the LLM.
+        input_tokens : int
+            Number of tokens sent to the model as input.
+        output_tokens : int
+            Number of tokens returned by the model.
+        execution_time : float, default=0.0
+            Execution time in seconds.
+
+        Returns
+        -------
+        ExecutionReport
+            Structured audit report with hallucination analysis,
+            cost estimation, and quality metrics.
+
+        Raises
+        ------
+        BudgetExceededError
+            If cumulative cost exceeds the configured budget limit.
+        LowConfidenceError
+            If confidence score is below guard threshold.
+
+        Notes
+        -----
+        This method automatically calls `display()` on the generated report,
+        showing the audit panel in the console. Use `execute()` if you want
+        to control when the report is displayed.
+
+        Examples
+        --------
+        Observe a completed conversation:
+
+        >>> report = auditor.observe(
+        ...     model="gpt-4o",
+        ...     input_text="Explain quantum computing",
+        ...     output_text="Quantum computing uses quantum mechanics...",
+        ...     input_tokens=150,
+        ...     output_tokens=300,
+        ...     execution_time=2.1
+        ... )
         """
         try:
             report = self._build_report(
@@ -241,25 +484,66 @@ class LLMAuditor:
         except Exception as exc:
             return self._fallback_report(model, output_text, exc)
 
-    def monitor(self, model: str, **monitor_kwargs: Any) -> Callable:
+    def monitor(self, model: str, **monitor_kwargs: Any) -> Callable[[Callable], Callable]:
         """
         Decorator that wraps an LLM-calling function for automatic auditing.
 
-        The decorated function should return a dict with:
-          - "response" (str): The LLM's text response.
-          - "input_tokens" (int): Input token count.
-          - "output_tokens" (int): Output token count.
+        The decorated function should return a dictionary with "response",
+        "input_tokens", and "output_tokens" keys, or return a string
+        (tokens default to 0). Measures execution time, runs hallucination
+        detection, applies governance, displays the report, and returns
+        the original result to the caller.
 
-        Or return a string (tokens default to 0).
+        Parameters
+        ----------
+        model : str
+            Name of the LLM model used (e.g., "gpt-4o-mini", "claude-3-sonnet").
+        **monitor_kwargs : Any
+            Additional keyword arguments for future extensibility.
+            Currently unused but preserved for compatibility.
 
-        Measures execution time, runs hallucination detection,
-        applies governance, displays the report, and returns the
-        original result to the caller.
+        Returns
+        -------
+        Callable[[Callable], Callable]
+            Decorator function that wraps the target function.
 
-        Usage:
-            @auditor.monitor(model="gpt-4o-mini")
-            def call_llm(prompt):
-                return {"response": "...", "input_tokens": 100, "output_tokens": 50}
+        Notes
+        -----
+        The decorated function should return either:
+        - A dict with keys: "response" (str), "input_tokens" (int), "output_tokens" (int)
+        - A string (tokens will default to 0)
+
+        The decorator automatically:
+        - Measures execution time
+        - Extracts input text from first positional argument or "prompt" keyword
+        - Runs hallucination detection and quality assessment
+        - Applies governance rules (budget, guard mode)
+        - Displays the audit report
+        - Returns the original function result unchanged
+
+        If the auditor encounters an error, it silently falls back to calling
+        the original function without auditing to ensure the host application
+        never crashes due to auditing issues.
+
+        Examples
+        --------
+        Decorate an OpenAI API calling function:
+
+        >>> @auditor.monitor(model="gpt-4o-mini")
+        ... def call_openai(prompt: str) -> dict:
+        ...     # Your OpenAI API call here
+        ...     response = openai.completions.create(...)
+        ...     return {
+        ...         "response": response.choices[0].text,
+        ...         "input_tokens": response.usage.prompt_tokens,
+        ...         "output_tokens": response.usage.completion_tokens
+        ...     }
+
+        Simple string return function:
+
+        >>> @auditor.monitor(model="local-llm")
+        ... def simple_llm(prompt: str) -> str:
+        ...     return "Generated response"
         """
 
         def decorator(func: Callable) -> Callable:
@@ -313,12 +597,60 @@ class LLMAuditor:
     #  HISTORY
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def history(self) -> list[ExecutionReport]:
-        """Return all recorded execution reports."""
+    def history(self) -> List[ExecutionReport]:
+        """
+        Return all recorded execution reports.
+
+        Returns
+        -------
+        List[ExecutionReport]
+            List of all execution reports recorded by this auditor instance
+            since initialization or since the last call to clear_history().
+            Reports are returned in chronological order.
+
+        Notes
+        -----
+        The returned list is a copy, so modifications to it will not
+        affect the internal history state.
+
+        Examples
+        --------
+        Review execution history:
+
+        >>> reports = auditor.history()
+        >>> print(f"Total executions: {len(reports)}")
+        >>> for report in reports[-5:]:  # Show last 5
+        ...     print(f"{report.model_name}: ${report.estimated_cost:.4f}")
+        """
         return list(self._history)
 
     def clear_history(self) -> None:
-        """Clear execution history and reset cumulative cost."""
+        """
+        Clear execution history and reset cumulative cost tracking.
+
+        This method removes all execution reports from the internal
+        history and resets the cumulative cost counter to zero.
+        Budget limits and other configuration remain unchanged.
+
+        Notes
+        -----
+        This operation:
+        - Clears all execution reports from history
+        - Resets cumulative cost to $0.00
+        - Preserves all configuration (budget, guard mode, etc.)
+        - Does not affect active evaluation sessions
+
+        Use this method to start fresh cost tracking or to
+        manage memory usage in long-running applications.
+
+        Examples
+        --------
+        Reset for new tracking period:
+
+        >>> auditor.clear_history()
+        >>> print(f"Executions: {len(auditor.history())}")
+        0
+        """
         self._history.clear()
         self._cumulative_cost = 0.0
 

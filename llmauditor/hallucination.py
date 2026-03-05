@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 # ── Regex patterns for factual claim detection ────────────────────────────── #
@@ -72,7 +72,83 @@ _NEGATION_WORDS = frozenset({
 
 @dataclass
 class HallucinationAnalysis:
-    """Structured result of hallucination risk assessment for a single execution."""
+    """
+    Structured result of hallucination risk assessment for a single execution.
+
+    This dataclass contains comprehensive analysis of potential hallucination
+    risks in LLM outputs using rule-based heuristics, optional AI judge scoring,
+    and ground truth comparison when available.
+
+    Attributes
+    ----------
+    risk_score : float
+        Overall hallucination risk score (0.0-1.0 scale, 0 = lowest risk).
+    risk_level : str
+        Categorical risk assessment:
+        - "LOW": Risk score 0.0-0.3
+        - "MEDIUM": Risk score 0.3-0.6  
+        - "HIGH": Risk score 0.6-0.8
+        - "CRITICAL": Risk score 0.8-1.0
+    factual_claims_count : int
+        Number of factual claims detected in the output.
+    specific_numbers_count : int
+        Count of specific numeric values (dates, percentages, currency).
+    date_references_count : int
+        Number of specific date references found.
+    currency_references_count : int
+        Number of monetary value references detected.
+    hedging_ratio : float
+        Ratio of hedging language to total claims (0.0-1.0).
+        Higher values indicate more cautious language.
+    absolute_claims_count : int
+        Number of absolute/definitive claims without hedging.
+    unsupported_claims : List[str]
+        List of claims that appear unsupported by context.
+    contradiction_flags : List[str]
+        List of detected internal contradictions in the output.
+    ai_judge_score : Optional[float]
+        AI judge factual consistency score (0.0-1.0) if available.
+    ai_judge_reasoning : Optional[str]
+        Explanation from AI judge about the scoring.
+    ground_truth_match : Optional[float]
+        Similarity score to ground truth data (0.0-1.0) if available.
+    method : str
+        Detection method used ("rule-based", "ai-judge", "hybrid").
+
+    Properties
+    ----------
+    risk_score_pct : int
+        Risk score as integer percentage (0-100).
+
+    Methods
+    -------
+    to_dict()
+        Convert analysis result to dictionary for serialization.
+
+    Notes
+    -----
+    The analysis is execution-based, analyzing only the input/output
+    of completed LLM calls. It never accesses source code or training data.
+
+    Rule-based detection looks for:
+    - Factual claims with specific numbers/dates
+    - Lack of hedging language ("approximately", "may", etc.)
+    - Internal contradictions
+    - Unsupported definitive statements
+
+    AI judge scoring (when enabled) provides additional factual
+    consistency assessment using a secondary LLM.
+
+    Examples
+    --------
+    Access hallucination analysis:
+
+    >>> print(f"Risk Level: {analysis.risk_level}")
+    >>> print(f"Risk Score: {analysis.risk_score_pct}%")
+    >>> print(f"Claims: {analysis.factual_claims_count}")
+    >>> if analysis.unsupported_claims:
+    ...     print(f"Unsupported: {analysis.unsupported_claims}")
+    """
 
     risk_score: float                           # 0.0–1.0 (0 = lowest risk)
     risk_level: str                             # LOW / MEDIUM / HIGH / CRITICAL
@@ -82,8 +158,8 @@ class HallucinationAnalysis:
     currency_references_count: int
     hedging_ratio: float                        # 0.0–1.0
     absolute_claims_count: int
-    unsupported_claims: list[str] = field(default_factory=list)
-    contradiction_flags: list[str] = field(default_factory=list)
+    unsupported_claims: List[str] = field(default_factory=list)
+    contradiction_flags: List[str] = field(default_factory=list)
     ai_judge_score: Optional[float] = None      # 0.0–1.0 if AI judge used
     ai_judge_reasoning: Optional[str] = None
     ground_truth_match: Optional[float] = None  # 0.0–1.0 if ground truth given
@@ -91,10 +167,45 @@ class HallucinationAnalysis:
 
     @property
     def risk_score_pct(self) -> int:
-        """Risk score as integer percentage 0–100."""
+        """
+        Risk score as integer percentage.
+
+        Returns
+        -------
+        int
+            Risk score converted to percentage (0-100).
+
+        Examples
+        --------
+        >>> print(f"Risk: {analysis.risk_score_pct}%")
+        """
         return round(self.risk_score * 100)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert hallucination analysis to dictionary for serialization.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary containing all analysis fields with rounded
+            numeric values for consistency.
+
+        Notes
+        -----
+        Numeric values are rounded appropriately:
+        - Risk scores: 4 decimal places
+        - Hedging ratio: 4 decimal places
+        - Other values: preserved as-is
+
+        Examples
+        --------
+        Get analysis as structured data:
+
+        >>> data = analysis.to_dict()
+        >>> print(f"Method: {data['method']}")
+        >>> print(f"Risk: {data['risk_score_pct']}%")
+        """
         return {
             "risk_score": round(self.risk_score, 4),
             "risk_score_pct": self.risk_score_pct,

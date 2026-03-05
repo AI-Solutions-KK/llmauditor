@@ -21,23 +21,99 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict
 
 
 # ── Data structures ──────────────────────────────────────────────────────── #
 
 @dataclass
 class CertificationScore:
-    """Complete scoring result with subscores and certification verdict."""
+    """
+    Complete certification scoring result with subscores and verdict.
+
+    This dataclass contains the comprehensive scoring analysis for an
+    LLM application evaluation, including overall score, certification
+    level, detailed subscores, and breakdown methodology.
+
+    Attributes
+    ----------
+    overall : float
+        Overall certification score (0-100 scale).
+    level : str
+        Certification level based on overall score:
+        - "Platinum" (≥90): Exceptional quality
+        - "Gold" (≥80): High quality
+        - "Silver" (≥70): Good quality  
+        - "Conditional Pass" (≥60): Acceptable with conditions
+        - "Fail" (<60): Below acceptable standards
+    level_emoji : str
+        Visual emoji indicator for certification level.
+    subscores : Dict[str, float]
+        Individual subscore components (0-100 each):
+        - "Stability": Latency/token variance, failure rate
+        - "Factual Reliability": Hallucination risk, confidence levels
+        - "Governance Compliance": Guard/budget/role violation rates
+        - "Cost Predictability": Cost variance, budget adherence
+        - "Risk Profile": Distribution of execution risk levels
+    weights : Dict[str, float]
+        Weight factors used for each subscore in overall calculation.
+    breakdown : Dict[str, Dict]
+        Detailed per-metric analysis and calculation methodology.
+
+    Methods
+    -------
+    to_dict()
+        Convert scoring result to dictionary for serialization.
+
+    Notes
+    -----
+    All scoring is metric-driven based on actual execution data,
+    never theoretical or static results. The overall score is
+    computed as a weighted sum of the individual subscores.
+
+    Certification levels follow industry standards for software
+    quality assessment and compliance frameworks.
+
+    Examples
+    --------
+    Access certification results:
+
+    >>> print(f"Overall Score: {score.overall:.1f}")
+    >>> print(f"Certification: {score.level} {score.level_emoji}")
+    >>> for name, value in score.subscores.items():
+    ...     print(f"{name}: {value:.1f}")
+    """
 
     overall: float                      # 0–100
     level: str                          # Platinum / Gold / Silver / Conditional Pass / Fail
     level_emoji: str                    # visual indicator
-    subscores: dict[str, float]         # name → 0–100
-    weights: dict[str, float]           # name → weight used
-    breakdown: dict[str, dict] = field(default_factory=dict)  # detailed per-metric
+    subscores: Dict[str, float]         # name → 0–100
+    weights: Dict[str, float]           # name → weight used
+    breakdown: Dict[str, Dict] = field(default_factory=dict)  # detailed per-metric
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert certification score to dictionary for serialization.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary containing rounded score values, certification level,
+            subscore breakdown, weights used, and detailed methodology.
+
+        Notes
+        -----
+        Numeric values are rounded to 2 decimal places for readability
+        and consistency in reporting.
+
+        Examples
+        --------
+        Get score as structured data:
+
+        >>> data = score.to_dict()
+        >>> print(f"Level: {data['level']}")
+        >>> print(f"Score: {data['overall']}")
+        """
         return {
             "overall": round(self.overall, 2),
             "level": self.level,
